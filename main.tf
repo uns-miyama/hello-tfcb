@@ -3,7 +3,7 @@ terraform {
     hostname     = "app.terraform.io"
     organization = "aucnet-inc"
     workspaces {
-      name = "hello-tf"
+      name = "hello-tf-vcs"
     }
   }
 }
@@ -44,6 +44,13 @@ resource "aws_security_group" "hashicat" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port       = 0
     to_port         = 0
@@ -80,3 +87,47 @@ resource "aws_eip_association" "hashicat" {
   instance_id   = aws_instance.hashicat.id
   allocation_id = aws_eip.hashicat.id
 }
+
+resource "null_resource" "configure-cat-app" {
+  depends_on = [aws_eip_association.hashicat]
+
+  triggers = {
+    build_number = timestamp()
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt -y update",
+      "sleep 15",
+      "sudo apt -y update",
+      "sudo apt -y install apache2",
+      "sudo systemctl start apache2",
+      "sudo chown -R ubuntu:ubuntu /var/www/html",
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = tls_private_key.hashicat.private_key_pem
+      host        = aws_eip.hashicat.public_ip
+    }
+  }
+}
+
+resource "tls_private_key" "hashicat" {
+  algorithm = "RSA"
+}
+
+locals {
+  private_key_filename = "${random_string.default.result}ssh-key.pem"
+}
+
+resource "aws_key_pair" "hashicat" {
+  key_name   = local.private_key_filename
+  public_key = tls_private_key.hashicat.public_key_openssh
+}
+
+resource "random_string" "default" {
+  length = 16
+}
+
