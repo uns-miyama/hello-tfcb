@@ -1,3 +1,7 @@
-output "ip_address" {
-  value = aws_eip.hashicat.public_ip
+output "eip" {
+  value = module.devinstance.eip
+}
+
+output "instance-info" {
+  value = module.devinstance.instance-info
 }
